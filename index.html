@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html>
 <head>
   <title>Monitoring ESP32</title>
@@ -14,9 +13,7 @@
       text-align: center;
     }
 
-    h2 {
-      color: #00e5ff;
-    }
+    h2 { color: #00e5ff; }
 
     button {
       padding: 10px 20px;
@@ -29,6 +26,7 @@
 
     .start { background-color: #00e676; }
     .stop { background-color: #ff5252; color: white; }
+    .interval { background-color: #2196f3; color: white; }
 
     canvas {
       background-color: #1e1e1e;
@@ -61,7 +59,6 @@
       font-weight: bold;
     }
   </style>
-
 </head>
 
 <body>
@@ -70,12 +67,20 @@
 
 <p id="status">Status: Loading...</p>
 
-<!-- TOMBOL -->
+<!-- START STOP -->
+<button class="start" onclick="setStatus('START')">🟢 START</button>
+<button class="stop" onclick="setStatus('STOP')">🔴 STOP</button>
 
-<button class="start" onclick="setStatus('START')">🟢 START</button> <button class="stop" onclick="setStatus('STOP')">🔴 STOP</button>
+<br><br>
+
+<!-- INTERVAL CONTROL -->
+<h3>⏱️ Setting Interval (detik)</h3>
+<input type="number" id="intervalInput" placeholder="contoh: 5">
+<button class="interval" onclick="setIntervalData()">SET</button>
+
+<p>Interval aktif: <span id="intervalInfo">-</span></p>
 
 <!-- GRAFIK -->
-
 <h3>📊 Suhu (LM35 & DHT11)</h3>
 <canvas id="chartTemp"></canvas>
 
@@ -88,7 +93,6 @@
 <br>
 
 <!-- TABEL -->
-
 <table id="data-table">
   <tr>
     <th>Waktu</th>
@@ -131,16 +135,34 @@ let chartFlow = new Chart(document.getElementById("chartFlow"), {
   ]}
 });
 
-// ===== CONTROL =====
+// ===== START STOP =====
 function setStatus(state) {
-  fetch(controlURL + "?setStatus=" + state)
+  fetch(controlURL + "?status=" + state)
     .then(res => res.text())
     .then(data => {
       document.getElementById("status").innerText = data;
     });
 }
 
-// ===== AMBIL STATUS =====
+// ===== INTERVAL =====
+function setIntervalData() {
+  let detik = document.getElementById("intervalInput").value;
+
+  if (!detik || detik <= 0) {
+    alert("Masukkan interval yang benar!");
+    return;
+  }
+
+  let ms = detik * 1000;
+
+  fetch(controlURL + "?interval=" + ms)
+    .then(res => res.text())
+    .then(data => {
+      document.getElementById("intervalInfo").innerText = detik + " detik";
+    });
+}
+
+// ===== GET STATUS =====
 function getStatus() {
   fetch(controlURL)
     .then(res => res.text())
