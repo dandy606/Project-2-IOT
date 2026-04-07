@@ -1,80 +1,30 @@
 <!DOCTYPE html>
-
 <html>
 <head>
   <title>Monitoring ESP32</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
   <style>
-    body {
-      background-color: #121212;
-      color: #ffffff;
-      font-family: Arial;
-      text-align: center;
-    }
-
-    h2 {
-      color: #00e5ff;
-    }
-
-    button {
-      padding: 10px 20px;
-      margin: 5px;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-
-    .start { background-color: #00e676; }
+    body { background-color: #121212; color: #ffffff; font-family: Arial; text-align: center; }
+    h2 { color: #00e5ff; }
+    button { padding: 10px 20px; margin: 5px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; }
+    .start { background-color: #00e676; color: black; }
     .stop { background-color: #ff5252; color: white; }
-
-    canvas {
-      background-color: #1e1e1e;
-      border-radius: 10px;
-      margin: 20px;
-      padding: 10px;
-      max-width: 90%;
-    }
-
-    table {
-      margin: auto;
-      border-collapse: collapse;
-      width: 90%;
-      background-color: #1e1e1e;
-    }
-
-    th, td {
-      padding: 8px;
-      border: 1px solid #333;
-    }
-
-    th {
-      background-color: #00bcd4;
-      color: black;
-    }
-
-    #status {
-      font-size: 18px;
-      margin: 10px;
-      font-weight: bold;
-    }
+    canvas { background-color: #1e1e1e; border-radius: 10px; margin: 20px auto; padding: 10px; max-width: 90%; display: block; }
+    table { margin: 20px auto; border-collapse: collapse; width: 90%; background-color: #1e1e1e; }
+    th, td { padding: 8px; border: 1px solid #333; }
+    th { background-color: #00bcd4; color: black; }
+    #status { font-size: 18px; margin: 10px; font-weight: bold; transition: 0.3s; }
   </style>
-
 </head>
 
 <body>
 
 <h2>🌙 Monitoring Sensor ESP32</h2>
+<p id="status">Status: Menghubungkan...</p>
 
-<p id="status">Status: Loading...</p>
-
-<!-- TOMBOL -->
-
-<button class="start" onclick="setStatus('START')">🟢 START</button> <button class="stop" onclick="setStatus('STOP')">🔴 STOP</button>
-
-<!-- GRAFIK -->
+<button class="start" onclick="setStatus('START')">🟢 START</button> 
+<button class="stop" onclick="setStatus('STOP')">🔴 STOP</button>
 
 <h3>📊 Suhu (LM35 & DHT11)</h3>
 <canvas id="chartTemp"></canvas>
@@ -87,82 +37,98 @@
 
 <br>
 
-<!-- TABEL -->
-
 <table id="data-table">
-  <tr>
-    <th>Waktu</th>
-    <th>LM35</th>
-    <th>DHT11</th>
-    <th>Humidity</th>
-    <th>Flow</th>
-  </tr>
+  <thead>
+    <tr>
+      <th>Waktu</th>
+      <th>LM35</th>
+      <th>DHT11</th>
+      <th>Humidity</th>
+      <th>Flow</th>
+    </tr>
+  </thead>
+  <tbody id="table-body">
+    </tbody>
 </table>
 
 <script>
-
 // ===== CONFIG =====
+// Pastikan URL Apps Script sudah benar hasil Deploy terbaru
 const sheetURL = "https://opensheet.elk.sh/1FPYOkyNUxfQHIs9WuXchkAKFpV8WczjSBQfyN1OB2YE/DATA";
-const controlURL = "https://script.google.com/macros/s/AKfycbx-cziGXnj42WpcGbeZ4xOm3-StjmqZ-n_8pJy9binWBI0ezmUJgbqPCJS1ONNBNLYN/exec";
+const controlURL = "https://script.google.com/macros/s/AKfycbzv-gfB-UDpn0PF3zXhsPmIwM7hZ1gtUa_SdsdALJXBf2TD9zbd1TR9SSMc1N-_hvD8/exec";
 
-const FLOW_MAX = 4.0;
-const FLOW_MIN = 0.3;
+let isSystemRunning = false; // Saklar tampilan web
 
-// ===== CHART =====
+// ===== INITIALIZE CHARTS =====
+const chartOptions = { responsive: true, scales: { y: { beginAtZero: true } } };
+
 let chartTemp = new Chart(document.getElementById("chartTemp"), {
   type: 'line',
   data: { labels: [], datasets: [
     { label: 'LM35 (°C)', data: [], borderColor: '#ff9800', tension: 0.3 },
     { label: 'DHT11 (°C)', data: [], borderColor: '#00e5ff', tension: 0.3 }
-  ]}
+  ]},
+  options: chartOptions
 });
 
 let chartHum = new Chart(document.getElementById("chartHum"), {
   type: 'line',
   data: { labels: [], datasets: [
     { label: 'Humidity (%)', data: [], borderColor: '#00e676', tension: 0.3 }
-  ]}
+  ]},
+  options: chartOptions
 });
 
 let chartFlow = new Chart(document.getElementById("chartFlow"), {
   type: 'line',
   data: { labels: [], datasets: [
     { label: 'Flow (L/min)', data: [], borderColor: '#ff5252', tension: 0.3 }
-  ]}
+  ]},
+  options: chartOptions
 });
 
-// ===== CONTROL =====
+// ===== FUNGSI KONTROL =====
 function setStatus(state) {
   fetch(controlURL + "?setStatus=" + state)
     .then(res => res.text())
     .then(data => {
-      document.getElementById("status").innerText = data;
+      console.log("Status diubah ke: " + state);
+      getStatus(); // Langsung update status setelah klik
     });
 }
 
-// ===== AMBIL STATUS =====
 function getStatus() {
   fetch(controlURL)
     .then(res => res.text())
     .then(data => {
-      document.getElementById("status").innerText = "Status: " + data;
+      const statusClean = data.trim();
+      document.getElementById("status").innerText = "Status: " + statusClean;
 
-      if (data === "START") {
+      if (statusClean === "START") {
+        isSystemRunning = true;
         document.getElementById("status").style.color = "lightgreen";
       } else {
+        isSystemRunning = false;
         document.getElementById("status").style.color = "red";
       }
-    });
+    })
+    .catch(err => console.error("Error ambil status:", err));
 }
 
-// ===== LOAD DATA =====
+// ===== LOAD DATA SENSOR =====
 function loadData(){
+  // JIKA STOP, JANGAN UPDATE TAMPILAN
+  if (!isSystemRunning) {
+    return; 
+  }
+
   fetch(sheetURL)
     .then(res => res.json())
     .then(data => {
+      if (!data || data.length === 0) return;
 
-      let table = document.getElementById("data-table");
-      table.innerHTML = table.rows[0].outerHTML;
+      const tableBody = document.getElementById("table-body");
+      tableBody.innerHTML = ""; // Bersihkan tabel sebelum update
 
       let labels = [];
       let lm35Data = [];
@@ -170,58 +136,55 @@ function loadData(){
       let humData = [];
       let flowData = [];
 
-      data.slice(-10).forEach(row => {
+      // Ambil 10 data terakhir saja untuk grafik
+      const lastData = data.slice(-10);
 
+      lastData.forEach(row => {
         let lm35 = parseFloat(row.LM35 || 0);
         let dht = parseFloat(row.DHT11 || 0);
         let hum = parseFloat(row.Humidity || 0);
         let flow = parseFloat(row.Flow || 0);
 
-        let tr = table.insertRow();
+        // Tambah baris ke tabel
+        let tr = tableBody.insertRow();
         tr.insertCell(0).innerText = row.Waktu;
         tr.insertCell(1).innerText = lm35;
         tr.insertCell(2).innerText = dht;
         tr.insertCell(3).innerText = hum;
         tr.insertCell(4).innerText = flow;
 
+        // Siapkan data grafik
         labels.push(row.Waktu);
         lm35Data.push(lm35);
         dhtData.push(dht);
         humData.push(hum);
         flowData.push(flow);
-
-        // NOTIF FLOW
-        if (flow > FLOW_MAX) {
-          document.getElementById("status").innerText = "⚠️ FLOW TINGGI!";
-          document.getElementById("status").style.color = "red";
-        } else if (flow < FLOW_MIN) {
-          document.getElementById("status").innerText = "⚠️ FLOW RENDAH!";
-          document.getElementById("status").style.color = "orange";
-        }
-
       });
 
+      // Update Grafik
       chartTemp.data.labels = labels;
       chartTemp.data.datasets[0].data = lm35Data;
       chartTemp.data.datasets[1].data = dhtData;
-      chartTemp.update();
+      chartTemp.update('none'); // Update tanpa animasi agar ringan
 
       chartHum.data.labels = labels;
       chartHum.data.datasets[0].data = humData;
-      chartHum.update();
+      chartHum.update('none');
 
       chartFlow.data.labels = labels;
       chartFlow.data.datasets[0].data = flowData;
-      chartFlow.update();
-
-    });
+      chartFlow.update('none');
+    })
+    .catch(err => console.error("Error load data:", err));
 }
 
 // ===== AUTO REFRESH =====
-setInterval(loadData, 3000);
-setInterval(getStatus, 3000);
+setInterval(getStatus, 2000); // Cek status setiap 2 detik
+setInterval(loadData, 3000);  // Update data setiap 3 detik (hanya jika START)
+
+// Jalankan cek status pertama kali saat web dibuka
+getStatus();
 
 </script>
-
 </body>
 </html>
